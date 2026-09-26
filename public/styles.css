@@ -481,6 +481,64 @@ table.diag-cand-table td { vertical-align: middle; }
   .lash-row { grid-template-columns: 1fr 1fr; }
 }
 
+/* ---------------- 往复运动回放 ---------------- */
+
+.recip-grid-head,
+.recip-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr 0.9fr 1.1fr 1.1fr 44px;
+  gap: 10px;
+  align-items: center;
+}
+.recip-grid-head {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.recip-row { margin-bottom: 8px; }
+@media (max-width: 640px) {
+  .recip-grid-head,
+  .recip-row { grid-template-columns: 1fr 1fr; }
+}
+
+.seg-grid-head,
+.seg-row {
+  display: grid;
+  grid-template-columns: 1.4fr 2fr 44px;
+  gap: 10px;
+  align-items: center;
+}
+.seg-grid-head {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.seg-row { margin-bottom: 8px; }
+.seg-index { font-size: 13px; font-weight: 600; color: var(--brand-dark); white-space: nowrap; }
+@media (max-width: 640px) {
+  .seg-grid-head,
+  .seg-row { grid-template-columns: 1fr 1fr; }
+}
+
+.table-scroll { overflow-x: auto; }
+table.replay-table th, table.replay-table td { white-space: nowrap; }
+.cell-dec { color: var(--muted); font-size: 11px; }
+
+.seg-detail {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: #fafbfc;
+}
+.seg-detail summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+.seg-detail .table-scroll { margin-top: 8px; }
+
 /* ---------------- 寿命核算 ---------------- */
 .grid.four {
   display: grid;

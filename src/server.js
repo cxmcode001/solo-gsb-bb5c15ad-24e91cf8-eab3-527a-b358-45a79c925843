@@ -52,6 +52,11 @@ const {
   planBacklash,
   MAX_STAGES: MAX_BACKLASH_STAGES,
 } = require('./backlash');
+const {
+  validateReciprocateInput,
+  planReciprocate,
+  MAX_SEGMENTS,
+} = require('./reciprocate');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -107,6 +112,11 @@ app.get('/lifetime', (_req, res) => {
 /** 友好访问反向空程预算页：/backlash → /backlash.html */
 app.get('/backlash', (_req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'backlash.html'));
+});
+
+/** 友好访问往复运动回放页：/reciprocate → /reciprocate.html */
+app.get('/reciprocate', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'reciprocate.html'));
 });
 
 /** BigInt 分数安全转为有限小数（用于前端展示） */
@@ -1004,6 +1014,57 @@ app.post('/api/backlash', (req, res) => {
   });
 });
 
+app.post('/api/reciprocate', (req, res) => {
+  const checked = validateReciprocateInput(req.body);
+  if (!checked.ok) return res.status(400).json({ error: checked.error });
+  const { stages, segments } = checked;
+
+  // 精确分数逐段回放：上游实际位移 × 负齿数比得 d，u = g + d，
+  // g' = min(w, max(0, u))，本级实际位移 = u − g'；间隙位置与累计位移跨段保留
+  const result = planReciprocate(stages, segments);
+
+  res.json({
+    stageCount: result.stageCount,
+    axisCount: result.axisCount,
+    segmentCount: result.segmentCount,
+    maxSegments: MAX_SEGMENTS,
+    stages: result.stages.map((st) => ({
+      stage: st.stage,
+      driveTeeth: st.driveTeeth,
+      drivenTeeth: st.drivenTeeth,
+      stageRatio: serializeFrac(st.stageRatio),
+      backlashWidth: serializeFrac(st.width),
+      initialGap: serializeFrac(st.initialGap),
+    })),
+    segments: result.segments.map((seg) => ({
+      index: seg.index,
+      inputTurns: serializeFrac(seg.inputTurns),
+      axes: seg.axes.map((ax) => ({
+        axis: ax.axis,
+        role: ax.axis === 1 ? '输入轴' : `第 ${ax.axis - 1} 级输出轴`,
+        actual: serializeFrac(ax.actual),
+        cumulative: serializeFrac(ax.cumulative),
+      })),
+      stages: seg.stages.map((sd) => ({
+        stage: sd.stage,
+        upstream: serializeFrac(sd.upstream),
+        d: serializeFrac(sd.d),
+        gapBefore: serializeFrac(sd.gapBefore),
+        u: serializeFrac(sd.u),
+        gapAfter: serializeFrac(sd.gapAfter),
+        actual: serializeFrac(sd.actual),
+      })),
+    })),
+    finalGaps: result.finalGaps.map((g, i) => ({ stage: i + 1, gap: serializeFrac(g) })),
+    finalCumulative: result.finalCumulative.map((c, a) => ({
+      axis: a + 1,
+      role: a === 0 ? '输入轴' : `第 ${a} 级输出轴`,
+      cumulative: serializeFrac(c),
+    })),
+    message: result.message,
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`齿轮组选配服务已启动： http://localhost:${PORT}`);
   console.log(`  单台选配： http://localhost:${PORT}/`);
@@ -1017,4 +1078,5 @@ app.listen(PORT, () => {
   console.log(`  装配校准： http://localhost:${PORT}/phase-reset`);
   console.log(`  共振避让： http://localhost:${PORT}/resonance`);
   console.log(`  反向空程预算： http://localhost:${PORT}/backlash`);
+  console.log(`  往复运动回放： http://localhost:${PORT}/reciprocate`);
 });

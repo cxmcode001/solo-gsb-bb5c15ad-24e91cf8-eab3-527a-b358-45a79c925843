@@ -87,6 +87,14 @@
 N = ⌈(期望 + B_hi) / 总速比⌉，并展示**各级折算空程**、**总区间**、
 该圈数下的**输出区间**与少转 1 圈时的保证下界（说明最少性）。
 
+再支持**往复运动回放**：录入已装好的 **1～3 级**外啮合传动各级**主动 / 从动正整数齿数**、
+每级**从动轴侧固定齿隙宽度 w** 与**初始间隙位置 g**（0 ≤ g ≤ w，分数或小数均可，
+无齿隙都填 0），再录入 **1～50 段有符号输入转数**（正转 / 反转 / 停顿填 0）。
+各轴累计位移初始为 0，每段按级传递：上游实际位移乘**负齿数比**得 d，
+令 u = g + d、g新 = min(w, max(0, u))，本级实际位移为 u − g新；
+更新间隙游标 g 并传给下一级，**跨段保留状态**。全程**精确分数**计算，
+逐段展示**各轴实际及累计位移**与**各级剩余间隙位置**，允许零齿隙与零位移。
+
 ## 一键启动（Docker Compose，自动安装依赖并构建）
 
 ```bash
@@ -108,6 +116,7 @@ docker compose up --build
 | 装配校准（相位回零 / 模同余合并） | **http://localhost:3000/phase-reset**（或 `/phase-reset.html`） |
 | 共振避让转速（禁用带反推 / 安全区间推荐） | **http://localhost:3000/resonance**（或 `/resonance.html`） |
 | 反向空程预算（齿隙折算 / 最少反转圈数） | **http://localhost:3000/backlash**（或 `/backlash.html`） |
+| 往复运动回放（分段传递 / 间隙游标跨段保留） | **http://localhost:3000/reciprocate**（或 `/reciprocate.html`） |
 
 后台运行可用 `docker compose up --build -d`，停止用 `docker compose down`。
 
@@ -125,7 +134,7 @@ npm start
 寿命核算页 http://localhost:3000/lifetime ，带载安全选配页 http://localhost:3000/torque ，
 轴位装配页 http://localhost:3000/layout ，转速异常定位页 http://localhost:3000/diagnose ，
 装配校准页 http://localhost:3000/phase-reset ，共振避让转速页 http://localhost:3000/resonance ，
-反向空程预算页 http://localhost:3000/backlash 。
+反向空程预算页 http://localhost:3000/backlash ，往复运动回放页 http://localhost:3000/reciprocate 。
 
 ## 必要配置（环境变量）
 
@@ -134,13 +143,14 @@ npm start
 | `PORT` | 容器内服务监听端口（一般无需修改） | `3000` |
 | `APP_PORT` | Compose 映射到宿主机的端口，按需覆盖，例如 `APP_PORT=8080 docker compose up --build` | `3000` |
 
-两个变量控制同一服务端口，十一个页面共用；例如改用宿主机 8080 端口后，访问
+两个变量控制同一服务端口，十二个页面共用；例如改用宿主机 8080 端口后，访问
 http://localhost:8080 （单台）、http://localhost:8080/batch （批量）、
 http://localhost:8080/procure （缺齿补货）、http://localhost:8080/dual-speed （双档换速）、
 http://localhost:8080/lifetime （寿命核算）、http://localhost:8080/torque （带载安全）、
 http://localhost:8080/layout （轴位装配）、http://localhost:8080/diagnose （转速异常定位）、
-http://localhost:8080/phase-reset （装配校准）、http://localhost:8080/resonance （共振避让转速）
-与 http://localhost:8080/backlash （反向空程预算）：
+http://localhost:8080/phase-reset （装配校准）、http://localhost:8080/resonance （共振避让转速）、
+http://localhost:8080/backlash （反向空程预算）
+与 http://localhost:8080/reciprocate （往复运动回放）：
 
 ```bash
 APP_PORT=8080 docker compose up --build
@@ -469,6 +479,39 @@ APP_PORT=8080 docker compose up --build
   （空程取下界 B_lo 时达到区间上界）。
 - 全部齿隙为 0 时总空程区间为 [0, 0]，输出区间退化为单点 N·R，
   最少圈数即 ⌈期望 / R⌉。
+
+## 使用说明 — 往复运动回放
+
+1. 在顶部导航进入 **往复回放**（`/reciprocate`）。
+2. 按 **输入轴 → 输出轴** 的顺序录入已装好的 **1～3 级**外啮合齿轮：每级填写
+   **主动齿数 / 从动齿数**（1～100000 的正整数），系统据此以精确分数计算
+   各级**负齿数比** −主动/从动（外啮合逐级换向）。
+3. 每级另填**从动轴侧固定齿隙宽度 w** 与**初始间隙位置 g**（单位：该级从动轴转数）：
+   非负分数（如 `1/4`）或小数（如 `0.25`），须满足 **0 ≤ g ≤ w**，约分后分母 ≤ 10¹²；
+   无齿隙时 w 与 g 都填 `0`（此时该级退化为无空程理想传动）。
+4. 录入 **1～50 段有符号输入转数**（按时间顺序）：正数正转、负数反转、`0` 为停顿段；
+   支持分数（如 `-1/2`）或小数（如 `0.25`），|转数| ≤ 10¹²。
+5. 点击“开始回放”，系统对每段逐级传递（全程精确分数，无浮点误差）：
+   - 上游实际位移 × 负齿数比得理想位移 **d**；
+   - **u = g + d**，**g新 = min(w, max(0, u))**（游标裁剪在 [0, w]）；
+   - 本级实际位移 = **u − g新**（被齿隙吸收后真正传出的位移），
+     更新游标 g ← g新 并作为下一级的上游位移；
+   - 各级游标**跨段保留**，各轴累计位移逐段累加（初始为 0）。
+6. 结果区依次展示：
+   - **传动参数与初始齿隙状态表**：各级齿数、负齿数比、齿隙宽度 w 与初始间隙 g；
+   - **逐段回放表**：每段的输入转数、**各轴实际位移（含累计）** 与 **各级剩余间隙位置**；
+   - **回放终态表**：各轴累计位移与末段后各级剩余间隙位置。
+
+### 往复运动回放的判定要点
+
+- 齿隙游标、位移传递与累计全部使用 **BigInt 精确分数**，无浮点误差；
+  游标裁剪 min(w, max(0, u)) 走分数三点比较，边界（恰好贴到 0 或 w）语义精确。
+- 反向转动先“吃掉”齿隙再传动：u 落在 [0, w] 内时本级实际位移为 0
+  （运动被空程吸收），超出部分才传给下一级。
+- **零齿隙**（w = 0，g 必为 0）时 g新 恒为 0，实际位移 = 理想位移 d，
+  退化为无空程理想传动；**零位移段**（转数 0）不改变任何游标与累计位移。
+- 间隙游标 g 是**有状态**的：同一级在不同段里的表现取决于之前各段累积的游标位置，
+  因此分段顺序不可交换。
 
 ## HTTP 接口
 
@@ -925,6 +968,43 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
   - `message`：面向页面的中文结论说明。
 - 全部计算使用 BigInt 精确分数与整数向上取整，无浮点误差。
 
+### `POST /api/reciprocate`（往复运动回放）
+
+```json
+{
+  "stages": [
+    { "driveTeeth": 20, "drivenTeeth": 40, "backlashWidth": "1/4", "initialGap": "1/8" },
+    { "driveTeeth": 24, "drivenTeeth": 36, "backlashWidth": "1/6", "initialGap": "0" }
+  ],
+  "segments": ["3", "-3/2", "0", "5/2", "-1"]
+}
+```
+
+上例为两级传动（负齿数比 −1/2、−2/3）回放 5 段：第 1 段输入 3 转时第 1 级
+u = 1/8 + (−3/2) = −11/8，游标贴到 0，轴 2 实际位移 −11/8 转；第 2 级
+u = 0 + 11/12，超出 w = 1/6，轴 3 实际位移 3/4 转。末段后输出轴累计位移
+13/12 转，各级剩余间隙位置 1/4、0 转。
+
+- `stages` 必须为 **1～3** 级；每级 `driveTeeth` / `drivenTeeth` 为
+  **1～100000 的正整数**；`backlashWidth`（w）与 `initialGap`（g）为该级
+  **从动轴侧**齿隙参数（单位：该轴转数）——**非负分数**
+  （分数字符串如 `"1/4"` 或小数值如 `0.25`，无齿隙都填 `0`），
+  须满足 **0 ≤ g ≤ w**，约分后分母 ≤ 10¹²、取值 ≤ 10¹² 转。
+- `segments` 必须为 **1～50** 段；每段为**有符号输入转数**
+  （分数字符串如 `"-3/2"`、小数值如 `0.5` 或整数，停顿填 `0`），
+  绝对值 ≤ 10¹² 转；参数非法返回 **400** 与明确错误。
+- 返回：
+  - `stages[]`：各级齿数、负齿数比 `stageRatio`（−主动/从动）、
+    齿隙宽度 `backlashWidth` 与初始间隙 `initialGap`（均为分数 + 小数）；
+  - `segments[]`：逐段给出 `inputTurns`、各轴 `axes[]`（`actual` 实际位移与
+    `cumulative` 累计位移）与各级传递明细 `stages[]`
+    （`ideal` 理想位移 d、`shifted` u = g + d、`gapAfter` 剩余间隙位置 g新、
+    `actual` 本级实际位移 = u − g新）；
+  - `finalCumulative[]` / `finalGaps[]`：回放终态的各轴累计位移与各级剩余间隙位置；
+  - `message`：面向页面的中文结论说明。
+- 全部计算使用 BigInt 精确分数（含负值），无浮点误差；间隙游标跨段保留，
+  同一请求内分段按顺序依次传递。
+
 ## 计算与排序规则
 
 - 每级转速比 = 主动轮齿数 / 从动轮齿数；总速比 = 各级速比之积（全程约分分数）。
@@ -1025,15 +1105,28 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
   最少正整数圈数 **N = ⌈(E + B_hi) / R⌉**（整数向上取整，E > 0 故 N ≥ 1 恒成立）；
   N−1 圈的保证下界 max(0, (N−1)·R − B_hi) 必小于 E，一并返回以说明最少性。
 
+### 往复运动回放的齿隙传递与状态保留
+
+- 各级负齿数比 r_k = −主动齿 / 从动齿（外啮合逐级换向，BigInt 约分分数，无浮点误差）；
+- 第 k 级从动轴侧齿隙用**游标模型**：固定宽度 w_k ≥ 0，游标 g_k ∈ [0, w_k]
+  表示当前空程所处位置（初始为录入值，跨段保留）；
+- 每段逐级传递：d = 上游实际位移 × r_k，u = g_k + d，
+  **g新 = min(w_k, max(0, u))**（分数三点裁剪），本级实际位移 = u − g新
+  （u 落在 [0, w] 内时全部被空程吸收、传出 0；超出部分才传出）；
+  更新 g_k ← g新，本级实际位移作为下一级的上游位移；
+- 各轴累计位移初始为 0，逐段累加该轴实际位移；输入轴实际位移即本段输入转数；
+- 零齿隙（w = 0）时 g新 恒为 0、实际位移 = d（理想传动）；零位移段不改变任何状态；
+- 游标有状态：反向运动时先反向吃掉前面积攒的游标再传动，故分段顺序不可交换。
+
 ## 目录结构
 
 ```
 .
 ├── Dockerfile              # 多平台 Node 20 Alpine 镜像，构建时安装依赖
-├── docker-compose.yml      # 一键启动服务（十一个页面同端口）
+├── docker-compose.yml      # 一键启动服务（十二个页面同端口）
 ├── package.json
 ├── src
-│   ├── server.js           # Express 服务：静态页面 + /api/search + /api/batch + /api/procure + /api/dual-speed + /api/lifetime + /api/torque + /api/layout + /api/diagnose + /api/phase-reset + /api/resonance + /api/backlash
+│   ├── server.js           # Express 服务：静态页面 + /api/search + /api/batch + /api/procure + /api/dual-speed + /api/lifetime + /api/torque + /api/layout + /api/diagnose + /api/phase-reset + /api/resonance + /api/backlash + /api/reciprocate
 │   ├── search.js           # 精确分数搜索算法（BigInt）：完整枚举与单台搜索
 │   ├── batch.js            # 批量装配：按集合留优 + 互不冲突组合的分支限界搜索
 │   ├── procure.js          # 缺齿补货：枚举可购子集，复用批量装配的候选分配与规则
@@ -1044,7 +1137,8 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
 │   ├── diagnose.js         # 转速异常定位：读数误差区间→实测速比区间，逐级求跨观测恒定倍率区间并交叉核对
 │   ├── phase.js            # 装配校准：相位回零化为模同余，广义 CRT 合并与冲突轴定位
 │   ├── resonance.js        # 共振避让：按齿数连乘求各轴倍率，禁用带反推整数输入区间，裁剪合并求安全区间与推荐
-│   └── backlash.js         # 反向空程预算：各级齿隙 × 后续级速比合成输出轴总空程区间，求保证达标的最少输入圈数
+│   ├── backlash.js         # 反向空程预算：各级齿隙 × 后续级速比合成输出轴总空程区间，求保证达标的最少输入圈数
+│   └── reciprocate.js      # 往复运动回放：分段有符号转数按级传递，齿隙游标裁剪 min(w, max(0, u)) 且跨段保留
 └── public
     ├── index.html          # 单台选配页面
     ├── batch.html          # 批量装配页面（/batch）
@@ -1057,6 +1151,7 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
     ├── phase-reset.html    # 装配校准页面（/phase-reset）
     ├── resonance.html      # 共振避让转速页面（/resonance）
     ├── backlash.html       # 反向空程预算页面（/backlash）
+    ├── reciprocate.html    # 往复运动回放页面（/reciprocate）
     ├── styles.css
     ├── app.js              # 单台页脚本
     ├── batch.js            # 批量页脚本
@@ -1068,5 +1163,6 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
     ├── diagnose.js         # 转速异常定位页脚本
     ├── phase-reset.js      # 装配校准页脚本
     ├── resonance.js        # 共振避让转速页脚本
-    └── backlash.js         # 反向空程预算页脚本
+    ├── backlash.js         # 反向空程预算页脚本
+    └── reciprocate.js      # 往复运动回放页脚本
 ```
